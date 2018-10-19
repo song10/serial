@@ -71,7 +71,7 @@ public:
 	void Close();
 	char ReadChar(bool& success);//return read char if success
 	bool WriteChar(char ch);////return success flag
-	bool Write(char *data);//write null terminated string and return success flag
+	bool Write(const char *data);//write null terminated string and return success flag
 	bool SetRTS(bool value);//return success flag
 	bool SetDTR(bool value);//return success flag
 	bool GetCTS(bool& success);
@@ -89,6 +89,8 @@ public:
 	char GetParity();
 	void SetStopBits(float nbits);
 	float GetStopBits();
+	ssize_t Write(const char* data, ssize_t len);
+	ssize_t Read(char* data, ssize_t len);
 };
 
 //---------------------------------------------------------
@@ -290,7 +292,7 @@ bool Serial::IsOpened()
 
 
 
-bool Serial::Write(char *data)
+bool Serial::Write(const char *data)
 {
 	if (!IsOpened()) {
 		return false;
@@ -554,7 +556,7 @@ char Serial::ReadChar(bool& success)
 	return rxchar;
 }
 
-bool Serial::Write(char *data)
+bool Serial::Write(const char *data)
 {
 	if (!IsOpened()) {return false;	}
 	long n = strlen(data);
@@ -570,6 +572,27 @@ bool Serial::WriteChar(char ch)
 	s[1]=0;//null terminated
 	return Write(s);
 }
+
+ssize_t Serial::Write(const char* data, ssize_t len)
+{
+    if (!IsOpened()) {
+        return -1;
+    }
+    if (len < 0)
+        len = 0;
+    return write(fd, data, len);
+}
+
+ssize_t Serial::Read(char* data, ssize_t len)
+{
+    ssize_t rz;
+    if (!IsOpened()) {
+        return -1;
+    }
+    rz = read(fd, data, len);
+    return rz;
+}
+
 //------------------------------------------------------------------------------
 bool Serial::SetRTS(bool value) {
 	long RTS_flag = TIOCM_RTS;
