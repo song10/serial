@@ -369,6 +369,78 @@ char Serial::ReadChar(bool& success)
 	return rxchar;
 }
 
+ssize_t Serial::Write(const char* data, ssize_t len)
+{
+	ssize_t rz;
+	if (!IsOpened()) {
+		return -1;
+	}
+	BOOL fRes;
+	DWORD dwWritten;
+
+	// Issue write.
+	if (!WriteFile(hComm, data, len, &dwWritten, &osWrite)) {
+		if (GetLastError() != ERROR_IO_PENDING) {rz = -1;}// WriteFile failed, but it isn't delayed. Report error and abort.
+		else {// Write is pending.
+			if (!GetOverlappedResult(hComm, &osWrite, &dwWritten, TRUE)) rz = -1;
+			else rz = dwWritten;// Write operation completed successfully.
+		}
+	}
+	else rz = dwWritten;// WriteFile completed immediately.
+	return len;
+}
+
+ssize_t Serial::Read(char* data, ssize_t len)
+{
+    ssize_t rz;
+    if (!IsOpened()) {
+        return -1;
+    }
+
+    DWORD dwRead;
+    DWORD length = len;
+    //the creation of the overlapped read operation
+    if (!fWaitingOnRead) {
+        // Issue read operation.
+        if (!ReadFile(hComm, data, length, &dwRead, &osReader)) {
+            if (GetLastError() != ERROR_IO_PENDING) { /*Error*/
+            } else {
+                fWaitingOnRead = TRUE; /*Waiting*/
+            }
+        } else {
+            if (dwRead == length)
+                rz = dwRead;
+        } //success
+	}
+
+
+	//detection of the completion of an overlapped read operation
+	DWORD dwRes;
+	if (fWaitingOnRead) {
+		dwRes = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
+		switch (dwRes)
+		{
+		// Read completed.
+		case WAIT_OBJECT_0:
+			if (!GetOverlappedResult(hComm, &osReader, &dwRead, FALSE)) {/*Error*/ }
+			else {
+				if (dwRead == length) rz = dwRead;
+				fWaitingOnRead = FALSE;// Reset flag so that another opertion can be issued.
+			}// Read completed successfully.
+			break;
+
+		case WAIT_TIMEOUT:
+			// Operation isn't complete yet.
+			break;
+
+		default:
+			// Error in the WaitForSingleObject;
+			break;
+		}
+	}
+	return rz;
+}
+
 bool Serial::SetRTS(bool value)
 {
 	bool r = false;
