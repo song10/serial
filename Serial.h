@@ -387,7 +387,7 @@ ssize_t Serial::Write(const char* data, ssize_t len)
 		}
 	}
 	else rz = dwWritten;// WriteFile completed immediately.
-	return len;
+	return rz;
 }
 
 ssize_t Serial::Read(char* data, ssize_t len)
