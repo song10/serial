@@ -206,6 +206,41 @@ long Serial::Open()
 #else
 	string wtext = port;
 #endif
+#if 1
+        DWORD accessdirection = GENERIC_READ | GENERIC_WRITE;
+        hComm =
+            CreateFile(wtext.c_str(), accessdirection, 0, 0, OPEN_EXISTING, 0, 0);
+        if (hComm == INVALID_HANDLE_VALUE) {
+            return 1;
+        }
+        DCB dcbSerialParams = {0};
+        dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+        if (!GetCommState(hComm, &dcbSerialParams)) {
+            return 3;
+        }
+        dcbSerialParams.BaudRate = baud; // baudrate
+        dcbSerialParams.ByteSize = 8;
+        dcbSerialParams.StopBits = ONESTOPBIT; // stopbits
+        dcbSerialParams.Parity = NOPARITY; // parity
+        if (!SetCommState(hComm, &dcbSerialParams)) {
+            return 4;
+        }
+        COMMTIMEOUTS timeouts = {0};
+        timeouts.ReadIntervalTimeout = 50;
+        timeouts.ReadTotalTimeoutConstant = 50;
+        timeouts.ReadTotalTimeoutMultiplier = 10;
+        timeouts.WriteTotalTimeoutConstant = 50;
+        timeouts.WriteTotalTimeoutMultiplier = 10;
+        if (!SetCommTimeouts(hComm, &timeouts)) {
+            return 9;
+        }
+        return 0;
+#else
+#ifdef UNICODE
+	wstring wtext(port.begin(),port.end());
+#else
+	string wtext = port;
+#endif
     hComm = CreateFile(wtext.c_str(),
         GENERIC_READ | GENERIC_WRITE,
         0,
@@ -270,6 +305,7 @@ long Serial::Open()
     timeouts.WriteTotalTimeoutConstant = 100;
     if (!SetCommTimeouts(hComm, &timeouts)) { return 9;} // Error setting time-outs.
 	return 0;
+#endif
 }
 
 void Serial::Close()
@@ -371,27 +407,52 @@ char Serial::ReadChar(bool& success)
 
 ssize_t Serial::Write(const char* data, ssize_t len)
 {
-	ssize_t rz;
-	if (!IsOpened()) {
-		return -1;
+#if 1
+    if (!IsOpened()) {
+        return -1;
+    }
+	DWORD dwBytesWrite = 0;
+	if(!WriteFile(hComm, data, len, &dwBytesWrite, NULL)){
+		// dwBytesWrite = -1;
 	}
-	BOOL fRes;
-	DWORD dwWritten;
+	return dwBytesWrite;
+#else
+    ssize_t rz;
+    if (!IsOpened()) {
+        return -1;
+    }
+    BOOL fRes;
+    DWORD dwWritten;
 
-	// Issue write.
-	if (!WriteFile(hComm, data, len, &dwWritten, &osWrite)) {
-		if (GetLastError() != ERROR_IO_PENDING) {rz = -1;}// WriteFile failed, but it isn't delayed. Report error and abort.
-		else {// Write is pending.
-			if (!GetOverlappedResult(hComm, &osWrite, &dwWritten, TRUE)) rz = -1;
-			else rz = dwWritten;// Write operation completed successfully.
-		}
-	}
-	else rz = dwWritten;// WriteFile completed immediately.
-	return rz;
+    // Issue write.
+    if (!WriteFile(hComm, data, len, &dwWritten, &osWrite)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            rz = -1;
+        } // WriteFile failed, but it isn't delayed. Report error and abort.
+        else { // Write is pending.
+            if (!GetOverlappedResult(hComm, &osWrite, &dwWritten, TRUE))
+                rz = -1;
+            else
+                rz = dwWritten; // Write operation completed successfully.
+        }
+    } else
+        rz = dwWritten; // WriteFile completed immediately.
+    return rz;
+#endif
 }
 
 ssize_t Serial::Read(char* data, ssize_t len)
 {
+#if 1
+    if (!IsOpened()) {
+        return -1;
+    }
+    DWORD dwBytesRead = 0;
+    if (!ReadFile(hComm, data, len, &dwBytesRead, NULL)) {
+        // dwBytesRead = -1;
+    }
+    return dwBytesRead;
+#else
     ssize_t rz;
     if (!IsOpened()) {
         return -1;
@@ -439,6 +500,7 @@ ssize_t Serial::Read(char* data, ssize_t len)
 		}
 	}
 	return rz;
+#endif
 }
 
 bool Serial::SetRTS(bool value)
